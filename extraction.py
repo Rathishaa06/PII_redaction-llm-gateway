@@ -7,9 +7,10 @@ from pathlib import Path
 
 import fitz  # PyMuPDF
 import pytesseract
-
+pytesseract.pytesseract.tesseract_cmd = (
+    r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+)
 from PIL import Image, UnidentifiedImageError
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 from docx import Document
 from pptx import Presentation
 from openpyxl import load_workbook
@@ -149,11 +150,18 @@ def detect_actual_file_type(data):
     if data.startswith(b"%PDF-"):
         return "pdf"
 
-    if data.startswith(b"\x89PNG\r\n\x1a\n"):
-        return "png"
+    try:
+        with Image.open(io.BytesIO(data)) as img:
+            image_format = img.format
 
-    if data.startswith(b"\xff\xd8\xff"):
-        return "jpeg"
+        if image_format == "PNG":
+            return "png"
+
+        if image_format == "JPEG":
+            return "jpeg"
+
+    except (UnidentifiedImageError, OSError):
+        pass
 
     # ZIP / OOXML containers.
     if data.startswith(b"PK\x03\x04") or data.startswith(b"PK\x05\x06"):
@@ -998,7 +1006,9 @@ def print_result(result):
 
     # Direct testing should be useful, but avoid dumping huge documents.
     max_items = 20
-    for index, item in enumerate(result.get("content", [])[:max_items], start=1):
+    items = result.get("content", [])
+
+    for index, item in enumerate(items[:max_items], start=1):
         print(
             f"\n[{index}] "
             f"{item['location_type'].upper()}: {item['location']}"
@@ -1017,10 +1027,10 @@ def print_result(result):
         if len(text) > len(preview):
             print("\n[Text preview truncated]")
 
-    if len(result.get("content", [])) > max_items:
+    if len(items) > max_items:
         print(
-            f"\n[Only the first {max_items} extracted units are displayed. "
-            "The full structured result remains available to the caller.]"
+            f"\nOnly the first {max_items} items are shown "
+            f"out of {len(items)} extracted items."
         )
 
     print("=" * 60)
